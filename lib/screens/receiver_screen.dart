@@ -21,24 +21,40 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
 
   Future<void> connect() async {
     final host = hostController.text.trim();
+
     if (host.isEmpty) {
-      setState(() => error = 'اكتب عنوان IP للهاتف المرسل.');
+      setState(() {
+        error = 'اكتب عنوان IP للهاتف المرسل.';
+      });
       return;
     }
+
     setState(() {
       error = null;
       frame = null;
     });
+
     try {
       await client.connect(host, 8080);
-      client.frames.listen((data) {
-        if (mounted) setState(() => frame = data);
-      }, onError: (e) {
-        if (mounted) setState(() {
-          connected = false;
-          error = e.toString();
-        });
-      });
+
+      client.frames.listen(
+        (data) {
+          if (mounted) {
+            setState(() {
+              frame = data;
+            });
+          }
+        },
+        onError: (e) {
+          if (mounted) {
+            setState(() {
+              connected = false;
+              error = e.toString();
+            });
+          }
+        },
+      );
+
       await DatabaseService.instance.insertSession(
         CameraSession(
           role: 'receiver',
@@ -47,18 +63,30 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
           startedAt: DateTime.now(),
         ),
       );
-      if (mounted) setState(() => connected = true);
+
+      if (mounted) {
+        setState(() {
+          connected = true;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() => error = 'تعذر الاتصال: $e');
+      if (mounted) {
+        setState(() {
+          error = 'تعذر الاتصال: $e';
+        });
+      }
     }
   }
 
   Future<void> disconnect() async {
     await client.disconnect();
-    if (mounted) setState(() {
-      connected = false;
-      frame = null;
-    });
+
+    if (mounted) {
+      setState(() {
+        connected = false;
+        frame = null;
+      });
+    }
   }
 
   @override
@@ -71,7 +99,9 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('الهاتف المشاهد')),
+      appBar: AppBar(
+        title: const Text('الهاتف المشاهد'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -102,21 +132,33 @@ class _ReceiverScreenState extends State<ReceiverScreen> {
               clipBehavior: Clip.antiAlias,
               child: frame == null
                   ? const Center(
-                      child: Text('لا يوجد بث',
-                          style: TextStyle(color: Colors.white)),
+                      child: Text(
+                        'لا يوجد بث',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     )
-                  : Image.memory(frame!, fit: BoxFit.contain),
+                  : Image.memory(
+                      frame!,
+                      fit: BoxFit.contain,
+                    ),
             ),
           ),
           if (error != null) ...[
             const SizedBox(height: 12),
-            Text(error!, style: const TextStyle(color: Colors.red)),
+            Text(
+              error!,
+              style: const TextStyle(color: Colors.red),
+            ),
           ],
           const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: connected ? disconnect : connect,
-            icon: Icon(connected ? Icons.link_off : Icons.link),
-            label: Text(connected ? 'قطع الاتصال' : 'اتصال بالبث'),
+            icon: Icon(
+              connected ? Icons.link_off : Icons.link,
+            ),
+            label: Text(
+              connected ? 'قطع الاتصال' : 'اتصال بالبث',
+            ),
           ),
         ],
       ),
