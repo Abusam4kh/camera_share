@@ -31,15 +31,32 @@ jobs:
           channel: stable
           cache: true
 
-      # Install Gradle 8.14.1.
-      # Gradle 8.14.1 is newer than Flutter's required 8.14.0.
       - name: Setup Gradle 8.14.1
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.14.1"
           validate-wrappers: false
 
-      # Generate the missing Gradle Wrapper files.
+      # Create the Flutter local.properties file required by
+      # android/settings.gradle.kts.
+      - name: Create Flutter local.properties
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p android
+
+          echo "Creating android/local.properties..."
+
+          cat > android/local.properties <<EOF
+          sdk.dir=${ANDROID_HOME}
+          flutter.sdk=${FLUTTER_ROOT}
+          EOF
+
+          echo "local.properties created successfully:"
+          cat android/local.properties
+
+      # Generate the missing Gradle Wrapper.
       - name: Generate Gradle Wrapper
         working-directory: android
         shell: bash
@@ -58,7 +75,7 @@ jobs:
           ls -la
           ls -la gradle/wrapper
 
-          echo "Gradle Wrapper version:"
+          echo "Checking Gradle Wrapper:"
           ./gradlew --version
 
       - name: Flutter Pub Get
@@ -67,7 +84,6 @@ jobs:
       - name: Flutter Analyze
         run: flutter analyze
 
-      # Build release APK using the generated Gradle Wrapper.
       - name: Build Release APK
         run: flutter build apk --release
 
