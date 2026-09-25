@@ -31,37 +31,34 @@ jobs:
           channel: stable
           cache: true
 
-      # Install Gradle 8.14.0 directly on GitHub Actions.
-      # This is needed because the current project does not contain
-      # the Gradle Wrapper files.
-      - name: Setup Gradle 8.14.0
+      # Install Gradle 8.14.1.
+      # Gradle 8.14.1 is newer than Flutter's required 8.14.0.
+      - name: Setup Gradle 8.14.1
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: "8.14.0"
+          gradle-version: "8.14.1"
           validate-wrappers: false
 
-      # Create the missing Gradle Wrapper files inside android/.
+      # Generate the missing Gradle Wrapper files.
       - name: Generate Gradle Wrapper
         working-directory: android
         shell: bash
         run: |
           set -e
 
-          echo "Generating Gradle Wrapper..."
+          echo "Generating Gradle Wrapper using Gradle 8.14.1..."
 
           gradle wrapper \
-            --gradle-version 8.14.0 \
+            --gradle-version 8.14.1 \
             --distribution-type bin
 
           chmod +x gradlew
 
-          echo "Gradle Wrapper generated successfully."
-
-          echo "Checking wrapper files..."
+          echo "Wrapper files:"
           ls -la
           ls -la gradle/wrapper
 
-          echo "Checking Gradle version..."
+          echo "Gradle Wrapper version:"
           ./gradlew --version
 
       - name: Flutter Pub Get
@@ -70,12 +67,10 @@ jobs:
       - name: Flutter Analyze
         run: flutter analyze
 
-      # Build the release APK.
-      # The generated wrapper is now available and points to Gradle 8.14.0.
+      # Build release APK using the generated Gradle Wrapper.
       - name: Build Release APK
         run: flutter build apk --release
 
-      # Copy the APK to a simple predictable location.
       - name: Prepare APK
         shell: bash
         run: |
@@ -87,10 +82,9 @@ jobs:
             build/app/outputs/flutter-apk/app-release.apk \
             build/release/app-release.apk
 
-          echo "APK created successfully:"
+          echo "APK successfully created:"
           ls -lh build/release/app-release.apk
 
-      # Upload app-release.apk as a GitHub Actions artifact.
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
