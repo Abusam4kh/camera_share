@@ -46,15 +46,56 @@ jobs:
 
           mkdir -p android
 
-          echo "Creating android/local.properties..."
-
           cat > android/local.properties <<EOF
           sdk.dir=${ANDROID_HOME}
           flutter.sdk=${FLUTTER_ROOT}
           EOF
 
-          echo "local.properties created successfully:"
+          echo "android/local.properties:"
           cat android/local.properties
+
+      # Flutter 3.47 requires Android Gradle Plugin 8.11.1 or newer.
+      # The existing project uses AGP 8.7.3, so update it automatically.
+      - name: Update Android Gradle Plugin
+        shell: bash
+        run: |
+          set -e
+
+          echo "Updating Android Gradle Plugin to 8.11.1..."
+
+          if [ -f android/settings.gradle.kts ]; then
+            sed -i \
+              -E 's/(com\.android\.(application|library)[[:space:]]+version[[:space:]]+["'\'']?)8\.[0-9]+\.[0-9]+/\18.11.1/g' \
+              android/settings.gradle.kts
+          fi
+
+          if [ -f android/settings.gradle ]; then
+            sed -i \
+              -E 's/(com\.android\.(application|library)[[:space:]]+version[[:space:]]+["'\'']?)8\.[0-9]+\.[0-9]+/\18.11.1/g' \
+              android/settings.gradle
+          fi
+
+          if [ -f android/build.gradle.kts ]; then
+            sed -i \
+              -E 's/(com\.android\.tools\.build:gradle:)[0-9]+\.[0-9]+\.[0-9]+/\18.11.1/g' \
+              android/build.gradle.kts
+          fi
+
+          if [ -f android/build.gradle ]; then
+            sed -i \
+              -E 's/(com\.android\.tools\.build:gradle:)[0-9]+\.[0-9]+\.[0-9]+/\18.11.1/g' \
+              android/build.gradle
+          fi
+
+          echo "Current Android Gradle Plugin references:"
+          grep -R \
+            -E 'com\.android\.(application|library)|com\.android\.tools\.build:gradle' \
+            android \
+            --include='settings.gradle' \
+            --include='settings.gradle.kts' \
+            --include='build.gradle' \
+            --include='build.gradle.kts' \
+            || true
 
       # Generate the missing Gradle Wrapper.
       - name: Generate Gradle Wrapper
