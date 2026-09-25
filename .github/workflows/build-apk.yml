@@ -47,7 +47,7 @@ jobs:
           flutter.sdk=${FLUTTER_ROOT}
           EOF
 
-          echo "android/local.properties:"
+          echo "===== android/local.properties ====="
           cat android/local.properties
 
       - name: Install Android SDK 37 and NDK
@@ -70,6 +70,7 @@ jobs:
 
           if [ -z "$SDKMANAGER" ] || [ ! -x "$SDKMANAGER" ]; then
             echo "ERROR: sdkmanager was not found."
+            find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null || true
             exit 1
           fi
 
@@ -85,15 +86,15 @@ jobs:
             "ndk;28.2.13676358"
 
           echo ""
-          echo "Installed Android SDK platforms:"
+          echo "===== Installed Android platforms ====="
           ls -la "$ANDROID_HOME/platforms"
 
           echo ""
-          echo "Installed NDK:"
+          echo "===== Installed NDK ====="
           ls -la "$ANDROID_HOME/ndk"
 
-          # GitHub Ubuntu 24.04 installs API 37 as android-37.0.
-          # Gradle/Android tooling may request android-37.
+          # GitHub Ubuntu images may install Android API 37
+          # under the directory android-37.0.
           if [ -d "$ANDROID_HOME/platforms/android-37.0" ]; then
             rm -rf "$ANDROID_HOME/platforms/android-37"
             ln -s \
@@ -102,8 +103,8 @@ jobs:
           fi
 
           echo ""
-          echo "Android SDK platform links:"
-          ls -la "$ANDROID_HOME/platforms" | grep "android-37"
+          echo "===== Android 37 ====="
+          ls -la "$ANDROID_HOME/platforms" | grep "android-37" || true
 
           echo ""
           echo "Android SDK and NDK installed successfully."
@@ -113,42 +114,44 @@ jobs:
         run: |
           set -e
 
-          echo "Updating AGP to 8.11.1..."
+          echo "Updating Android Gradle Plugin to 8.11.1..."
           echo "Updating Kotlin to 2.2.20..."
 
+          # ---------------------------------------------------------
+          # settings.gradle.kts
+          # ---------------------------------------------------------
           if [ -f android/settings.gradle.kts ]; then
 
             sed -i \
-              's/id("com\.android\.application") version "[^"]*"/id("com.android.application") version "8.11.1"/' \
+              -E 's/(id\("com\.android\.application"\)[[:space:]]+version[[:space:]]+")([0-9]+\.[0-9]+\.[0-9]+)(")/\18.11.1\3/g' \
               android/settings.gradle.kts
 
             sed -i \
-              's/id("org\.jetbrains\.kotlin\.android") version "[^"]*"/id("org.jetbrains.kotlin.android") version "2.2.20"/' \
+              -E 's/(id\("org\.jetbrains\.kotlin\.android"\)[[:space:]]+version[[:space:]]+")([0-9]+\.[0-9]+\.[0-9]+)(")/\12.2.20\3/g' \
               android/settings.gradle.kts
 
           fi
 
-          if [ -f android/settings.gradle ]; then
-            sed -i \
-              -E 's/(com\.android\.application["'\'']?[[:space:]]+version[[:space:]]+["'\''])[0-9]+\.[0-9]+\.[0-9]+/\18.11.1/' \
-              android/settings.gradle || true
-
-            sed -i \
-              -E 's/(org\.jetbrains\.kotlin\.android["'\'']?[[:space:]]+version[[:space:]]+["'\''])[0-9]+\.[0-9]+\.[0-9]+/\12.2.20/' \
-              android/settings.gradle || true
-          fi
-
+          # ---------------------------------------------------------
+          # build.gradle.kts
+          # ---------------------------------------------------------
           if [ -f android/build.gradle.kts ]; then
-            sed -i \
-              -E 's/(com\.android\.application") version ")[0-9]+\.[0-9]+\.[0-9]+/\18.11.1/' \
-              android/build.gradle.kts || true
 
             sed -i \
-              -E 's/(org\.jetbrains\.kotlin\.android") version ")[0-9]+\.[0-9]+\.[0-9]+/\12.2.20/' \
-              android/build.gradle.kts || true
+              -E 's/(id\("com\.android\.application"\)[[:space:]]+version[[:space:]]+")([0-9]+\.[0-9]+\.[0-9]+)(")/\18.11.1\3/g' \
+              android/build.gradle.kts
+
+            sed -i \
+              -E 's/(id\("org\.jetbrains\.kotlin\.android"\)[[:space:]]+version[[:space:]]+")([0-9]+\.[0-9]+\.[0-9]+)(")/\12.2.20\3/g' \
+              android/build.gradle.kts
+
           fi
 
+          # ---------------------------------------------------------
+          # build.gradle
+          # ---------------------------------------------------------
           if [ -f android/build.gradle ]; then
+
             sed -i \
               -E 's/(com\.android\.tools\.build:gradle:)[0-9]+\.[0-9]+\.[0-9]+/\18.11.1/g' \
               android/build.gradle || true
@@ -156,9 +159,53 @@ jobs:
             sed -i \
               -E 's/(org\.jetbrains\.kotlin:kotlin-gradle-plugin:)[0-9]+\.[0-9]+\.[0-9]+/\12.2.20/g' \
               android/build.gradle || true
+
           fi
 
-          echo "Android build files updated."
+          echo ""
+          echo "========================================"
+          echo "FINAL ANDROID BUILD VERSIONS"
+          echo "========================================"
+
+          echo ""
+          echo "--- settings.gradle.kts ---"
+          if [ -f android/settings.gradle.kts ]; then
+            grep -nE \
+              'com.android.application|org.jetbrains.kotlin.android' \
+              android/settings.gradle.kts || true
+          fi
+
+          echo ""
+          echo "--- build.gradle.kts ---"
+          if [ -f android/build.gradle.kts ]; then
+            grep -nE \
+              'com.android.application|org.jetbrains.kotlin.android' \
+              android/build.gradle.kts || true
+          fi
+
+          echo ""
+          echo "--- build.gradle ---"
+          if [ -f android/build.gradle ]; then
+            grep -nE \
+              'com.android.tools.build:gradle|kotlin-gradle-plugin' \
+              android/build.gradle || true
+          fi
+
+          echo ""
+          echo "Checking for old AGP 8.7.3..."
+
+          if grep -R \
+            'com.android.application.*8.7.3' \
+            android \
+            --include='*.gradle' \
+            --include='*.gradle.kts' \
+            2>/dev/null; then
+
+            echo "ERROR: AGP 8.7.3 still exists."
+            exit 1
+          fi
+
+          echo "Old AGP 8.7.3 was removed successfully."
 
       - name: Configure compileSdk and NDK
         shell: bash
@@ -172,10 +219,12 @@ jobs:
             exit 1
           fi
 
+          # Set compileSdk to Android API 37.
           sed -i \
             's/compileSdk = flutter\.compileSdkVersion/compileSdk = 37/' \
             "$FILE"
 
+          # Set required NDK.
           if grep -q "ndkVersion" "$FILE"; then
             sed -i \
               's/ndkVersion = .*/ndkVersion = "28.2.13676358"/' \
@@ -187,6 +236,7 @@ jobs:
               "$FILE"
           fi
 
+          echo ""
           echo "===== android/app/build.gradle.kts ====="
           cat "$FILE"
 
@@ -236,13 +286,21 @@ jobs:
 
           echo "Launcher icon created."
 
-          grep -n "android:icon" android/app/src/main/AndroidManifest.xml
+          echo ""
+          echo "Manifest icon:"
+          grep -n "android:icon" \
+            android/app/src/main/AndroidManifest.xml
 
       - name: Verify Android configuration
         shell: bash
         run: |
           set -e
 
+          echo "========================================"
+          echo "VERIFY ANDROID CONFIGURATION"
+          echo "========================================"
+
+          echo ""
           echo "===== AGP ====="
           grep -R \
             "com.android.application" \
@@ -265,15 +323,22 @@ jobs:
             android/app/build.gradle.kts
 
           echo ""
-          echo "===== Android 37 ====="
+          echo "===== Android API 37 ====="
           test -d "$ANDROID_HOME/platforms/android-37"
           test -f "$ANDROID_HOME/platforms/android-37/android.jar"
           echo "Android API 37 is ready."
 
           echo ""
+          echo "===== NDK 28.2 ====="
+          test -d "$ANDROID_HOME/ndk/28.2.13676358"
+          echo "NDK 28.2.13676358 is ready."
+
+          echo ""
           echo "===== Launcher icon ====="
-          test -f android/app/src/main/res/drawable/ic_launcher.xml
-          echo "Launcher icon OK."
+          test -f \
+            android/app/src/main/res/drawable/ic_launcher.xml
+
+          echo "Launcher icon is ready."
 
       - name: Generate Gradle Wrapper
         working-directory: android
@@ -299,13 +364,19 @@ jobs:
           ./gradlew --version
 
       - name: Flutter Pub Get
-        run: flutter pub get
+        run: |
+          set -e
+          flutter pub get
 
       - name: Flutter Analyze
-        run: flutter analyze
+        run: |
+          set -e
+          flutter analyze
 
       - name: Build Release APK
-        run: flutter build apk --release
+        run: |
+          set -e
+          flutter build apk --release
 
       - name: Prepare APK
         shell: bash
@@ -319,9 +390,9 @@ jobs:
             build/release/app-release.apk
 
           echo ""
-          echo "================================"
+          echo "========================================"
           echo "APK CREATED SUCCESSFULLY"
-          echo "================================"
+          echo "========================================"
 
           ls -lh build/release/app-release.apk
 
