@@ -37,65 +37,118 @@ jobs:
           gradle-version: "8.14.1"
           validate-wrappers: false
 
-      # Create the Flutter local.properties file required by
-      # android/settings.gradle.kts.
-      - name: Create Flutter local.properties
+      # Create the Flutter local.properties file.
+      - name: Create local.properties
         shell: bash
         run: |
           set -e
-
-          mkdir -p android
 
           cat > android/local.properties <<EOF
           sdk.dir=${ANDROID_HOME}
           flutter.sdk=${FLUTTER_ROOT}
           EOF
 
-          echo "android/local.properties:"
+          echo "Created android/local.properties:"
           cat android/local.properties
 
-      # Flutter 3.47 requires Android Gradle Plugin 8.11.1 or newer.
-      # The existing project uses AGP 8.7.3, so update it automatically.
-      - name: Update Android Gradle Plugin
+      # Update AGP and Kotlin versions in the Kotlin DSL files.
+      - name: Update Android build versions
         shell: bash
         run: |
           set -e
 
           echo "Updating Android Gradle Plugin to 8.11.1..."
+          echo "Updating Kotlin Gradle Plugin to 2.2.20..."
 
+          # settings.gradle.kts
           if [ -f android/settings.gradle.kts ]; then
+
             sed -i \
-              -E 's/(com\.android\.(application|library)[[:space:]]+version[[:space:]]+["'\'']?)8\.[0-9]+\.[0-9]+/\18.11.1/g' \
+              's/id("com\.android\.application") version "[^"]*"/id("com.android.application") version "8.11.1"/' \
               android/settings.gradle.kts
+
+            sed -i \
+              's/id("org\.jetbrains\.kotlin\.android") version "[^"]*"/id("org.jetbrains.kotlin.android") version "2.2.20"/' \
+              android/settings.gradle.kts
+
           fi
 
+          # settings.gradle, if present
           if [ -f android/settings.gradle ]; then
+
             sed -i \
-              -E 's/(com\.android\.(application|library)[[:space:]]+version[[:space:]]+["'\'']?)8\.[0-9]+\.[0-9]+/\18.11.1/g' \
+              's/id[[:space:]]*["'\'']com\.android\.application["'\''][[:space:]]*version[[:space:]]*["'\''][^"'\'']*["'\'']/id "com.android.application" version "8.11.1"/' \
               android/settings.gradle
-          fi
 
-          if [ -f android/build.gradle.kts ]; then
             sed -i \
-              -E 's/(com\.android\.tools\.build:gradle:)[0-9]+\.[0-9]+\.[0-9]+/\18.11.1/g' \
-              android/build.gradle.kts
+              's/id[[:space:]]*["'\'']org\.jetbrains\.kotlin\.android["'\''][[:space:]]*version[[:space:]]*["'\''][^"'\'']*["'\'']/id "org.jetbrains.kotlin.android" version "2.2.20"/' \
+              android/settings.gradle
+
           fi
 
+          # build.gradle.kts
+          if [ -f android/build.gradle.kts ]; then
+
+            sed -i \
+              's/id("com\.android\.application") version "[^"]*" apply false/id("com.android.application") version "8.11.1" apply false/' \
+              android/build.gradle.kts
+
+            sed -i \
+              's/id("org\.jetbrains\.kotlin\.android") version "[^"]*" apply false/id("org.jetbrains.kotlin.android") version "2.2.20" apply false/' \
+              android/build.gradle.kts
+
+          fi
+
+          # build.gradle, if present
           if [ -f android/build.gradle ]; then
+
             sed -i \
               -E 's/(com\.android\.tools\.build:gradle:)[0-9]+\.[0-9]+\.[0-9]+/\18.11.1/g' \
               android/build.gradle
+
+            sed -i \
+              -E 's/(org\.jetbrains\.kotlin:kotlin-gradle-plugin:)[0-9]+\.[0-9]+\.[0-9]+/\12.2.20/g' \
+              android/build.gradle
+
           fi
 
-          echo "Current Android Gradle Plugin references:"
-          grep -R \
-            -E 'com\.android\.(application|library)|com\.android\.tools\.build:gradle' \
-            android \
-            --include='settings.gradle' \
-            --include='settings.gradle.kts' \
-            --include='build.gradle' \
-            --include='build.gradle.kts' \
-            || true
+          echo ""
+          echo "===== settings.gradle.kts ====="
+          if [ -f android/settings.gradle.kts ]; then
+            cat android/settings.gradle.kts
+          fi
+
+          echo ""
+          echo "===== build.gradle.kts ====="
+          if [ -f android/build.gradle.kts ]; then
+            cat android/build.gradle.kts
+          fi
+
+      # Verify that the versions were actually changed.
+      - name: Verify Android versions
+        shell: bash
+        run: |
+          set -e
+
+          echo "Checking Android Gradle Plugin..."
+
+          if ! grep -R 'com.android.application.*8.11.1' \
+            android/settings.gradle.kts \
+            android/build.gradle.kts 2>/dev/null; then
+            echo "ERROR: AGP 8.11.1 was not found."
+            exit 1
+          fi
+
+          echo "Checking Kotlin..."
+
+          if ! grep -R 'org.jetbrains.kotlin.android.*2.2.20' \
+            android/settings.gradle.kts \
+            android/build.gradle.kts 2>/dev/null; then
+            echo "ERROR: Kotlin 2.2.20 was not found."
+            exit 1
+          fi
+
+          echo "Android versions verified successfully."
 
       # Generate the missing Gradle Wrapper.
       - name: Generate Gradle Wrapper
@@ -112,11 +165,13 @@ jobs:
 
           chmod +x gradlew
 
-          echo "Wrapper files:"
+          echo ""
+          echo "===== Wrapper files ====="
           ls -la
           ls -la gradle/wrapper
 
-          echo "Checking Gradle Wrapper:"
+          echo ""
+          echo "===== Gradle version ====="
           ./gradlew --version
 
       - name: Flutter Pub Get
@@ -139,7 +194,8 @@ jobs:
             build/app/outputs/flutter-apk/app-release.apk \
             build/release/app-release.apk
 
-          echo "APK successfully created:"
+          echo ""
+          echo "===== APK CREATED ====="
           ls -lh build/release/app-release.apk
 
       - name: Upload APK
