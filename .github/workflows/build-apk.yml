@@ -62,32 +62,50 @@ jobs:
 
           if command -v sdkmanager >/dev/null 2>&1; then
             SDKMANAGER="$(command -v sdkmanager)"
-          elif [ -n "${ANDROID_HOME:-}" ] && [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+          elif [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
             SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          elif [ -n "${ANDROID_HOME:-}" ] && [ -x "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/bin/sdkmanager"
           else
             SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1 || true)"
           fi
 
           if [ -z "$SDKMANAGER" ] || [ ! -x "$SDKMANAGER" ]; then
             echo "ERROR: sdkmanager was not found."
-            echo "Searching Android SDK..."
-            find "${ANDROID_HOME:-/opt}" -type f -name sdkmanager 2>/dev/null || true
             exit 1
           fi
 
           echo "Using sdkmanager:"
           echo "$SDKMANAGER"
 
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --list | grep -E "platforms;android-37|ndk;28.2.13676358" || true
 
           "$SDKMANAGER" \
             "platform-tools" \
-            "platforms;android-37" \
+            "platforms;android-37.0" \
             "build-tools;35.0.0" \
             "ndk;28.2.13676358"
 
+          echo ""
+          echo "Installed Android SDK platforms:"
+          ls -la "$ANDROID_HOME/platforms"
+
+          echo ""
+          echo "Installed NDK:"
+          ls -la "$ANDROID_HOME/ndk"
+
+          # GitHub Ubuntu 24.04 installs API 37 as android-37.0.
+          # Gradle/Android tooling may request android-37.
+          if [ -d "$ANDROID_HOME/platforms/android-37.0" ]; then
+            rm -rf "$ANDROID_HOME/platforms/android-37"
+            ln -s \
+              "$ANDROID_HOME/platforms/android-37.0" \
+              "$ANDROID_HOME/platforms/android-37"
+          fi
+
+          echo ""
+          echo "Android SDK platform links:"
+          ls -la "$ANDROID_HOME/platforms" | grep "android-37"
+
+          echo ""
           echo "Android SDK and NDK installed successfully."
 
       - name: Update Android build versions
@@ -247,9 +265,15 @@ jobs:
             android/app/build.gradle.kts
 
           echo ""
+          echo "===== Android 37 ====="
+          test -d "$ANDROID_HOME/platforms/android-37"
+          test -f "$ANDROID_HOME/platforms/android-37/android.jar"
+          echo "Android API 37 is ready."
+
+          echo ""
           echo "===== Launcher icon ====="
           test -f android/app/src/main/res/drawable/ic_launcher.xml
-          echo "OK"
+          echo "Launcher icon OK."
 
       - name: Generate Gradle Wrapper
         working-directory: android
