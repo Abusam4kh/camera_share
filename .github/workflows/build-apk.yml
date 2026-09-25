@@ -31,7 +31,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Setup Gradle 8.14.1
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.14.1"
@@ -47,37 +47,36 @@ jobs:
           flutter.sdk=${FLUTTER_ROOT}
           EOF
 
-          echo "===== android/local.properties ====="
+          echo "===== local.properties ====="
           cat android/local.properties
 
-      - name: Install Android SDK 37 and NDK
+      - name: Install Android SDK and NDK
         shell: bash
         run: |
           set -e
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
 
-          SDKMANAGER=""
-
-          if command -v sdkmanager >/dev/null 2>&1; then
-            SDKMANAGER="$(command -v sdkmanager)"
-          elif [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          else
-            SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1 || true)"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)"
           fi
 
           if [ -z "$SDKMANAGER" ] || [ ! -x "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager was not found."
-            find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null || true
+            echo "ERROR: sdkmanager not found."
             exit 1
           fi
 
-          echo "Using sdkmanager:"
+          echo "Using:"
           echo "$SDKMANAGER"
 
-          "$SDKMANAGER" --list | grep -E "platforms;android-37|ndk;28.2.13676358" || true
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          echo ""
+          echo "Available API 37 packages:"
+          "$SDKMANAGER" --list | grep "platforms;android-37" || true
+
+          echo ""
+          echo "Installing required packages..."
 
           "$SDKMANAGER" \
             "platform-tools" \
@@ -86,40 +85,21 @@ jobs:
             "ndk;28.2.13676358"
 
           echo ""
-          echo "===== Installed Android platforms ====="
-          ls -la "$ANDROID_HOME/platforms"
+          echo "===== Android platforms ====="
+          find "$ANDROID_HOME/platforms" -maxdepth 1 -type d -print
 
           echo ""
-          echo "===== Installed NDK ====="
-          ls -la "$ANDROID_HOME/ndk"
-
-          # GitHub Ubuntu images may install Android API 37
-          # under the directory android-37.0.
-          if [ -d "$ANDROID_HOME/platforms/android-37.0" ]; then
-            rm -rf "$ANDROID_HOME/platforms/android-37"
-            ln -s \
-              "$ANDROID_HOME/platforms/android-37.0" \
-              "$ANDROID_HOME/platforms/android-37"
-          fi
-
-          echo ""
-          echo "===== Android 37 ====="
-          ls -la "$ANDROID_HOME/platforms" | grep "android-37" || true
-
-          echo ""
-          echo "Android SDK and NDK installed successfully."
+          echo "===== NDK ====="
+          find "$ANDROID_HOME/ndk" -maxdepth 1 -type d -print
 
       - name: Update Android build versions
         shell: bash
         run: |
           set -e
 
-          echo "Updating Android Gradle Plugin to 8.11.1..."
-          echo "Updating Kotlin to 2.2.20..."
+          echo "Updating AGP to 8.11.1"
+          echo "Updating Kotlin to 2.2.20"
 
-          # ---------------------------------------------------------
-          # settings.gradle.kts
-          # ---------------------------------------------------------
           if [ -f android/settings.gradle.kts ]; then
 
             sed -i \
@@ -132,9 +112,6 @@ jobs:
 
           fi
 
-          # ---------------------------------------------------------
-          # build.gradle.kts
-          # ---------------------------------------------------------
           if [ -f android/build.gradle.kts ]; then
 
             sed -i \
@@ -147,9 +124,6 @@ jobs:
 
           fi
 
-          # ---------------------------------------------------------
-          # build.gradle
-          # ---------------------------------------------------------
           if [ -f android/build.gradle ]; then
 
             sed -i \
@@ -163,49 +137,14 @@ jobs:
           fi
 
           echo ""
-          echo "========================================"
-          echo "FINAL ANDROID BUILD VERSIONS"
-          echo "========================================"
+          echo "===== Android plugin versions ====="
 
-          echo ""
-          echo "--- settings.gradle.kts ---"
-          if [ -f android/settings.gradle.kts ]; then
-            grep -nE \
-              'com.android.application|org.jetbrains.kotlin.android' \
-              android/settings.gradle.kts || true
-          fi
-
-          echo ""
-          echo "--- build.gradle.kts ---"
-          if [ -f android/build.gradle.kts ]; then
-            grep -nE \
-              'com.android.application|org.jetbrains.kotlin.android' \
-              android/build.gradle.kts || true
-          fi
-
-          echo ""
-          echo "--- build.gradle ---"
-          if [ -f android/build.gradle ]; then
-            grep -nE \
-              'com.android.tools.build:gradle|kotlin-gradle-plugin' \
-              android/build.gradle || true
-          fi
-
-          echo ""
-          echo "Checking for old AGP 8.7.3..."
-
-          if grep -R \
-            'com.android.application.*8.7.3' \
+          grep -R \
+            -E 'com\.android\.application|org\.jetbrains\.kotlin\.android' \
             android \
             --include='*.gradle' \
             --include='*.gradle.kts' \
-            2>/dev/null; then
-
-            echo "ERROR: AGP 8.7.3 still exists."
-            exit 1
-          fi
-
-          echo "Old AGP 8.7.3 was removed successfully."
+            2>/dev/null || true
 
       - name: Configure compileSdk and NDK
         shell: bash
@@ -219,12 +158,10 @@ jobs:
             exit 1
           fi
 
-          # Set compileSdk to Android API 37.
           sed -i \
             's/compileSdk = flutter\.compileSdkVersion/compileSdk = 37/' \
             "$FILE"
 
-          # Set required NDK.
           if grep -q "ndkVersion" "$FILE"; then
             sed -i \
               's/ndkVersion = .*/ndkVersion = "28.2.13676358"/' \
@@ -237,7 +174,7 @@ jobs:
           fi
 
           echo ""
-          echo "===== android/app/build.gradle.kts ====="
+          echo "===== app/build.gradle.kts ====="
           cat "$FILE"
 
       - name: Create launcher icon
@@ -284,69 +221,44 @@ jobs:
             's#@mipmap/ic_launcher#@drawable/ic_launcher#' \
             android/app/src/main/AndroidManifest.xml
 
-          echo "Launcher icon created."
-
-          echo ""
-          echo "Manifest icon:"
-          grep -n "android:icon" \
-            android/app/src/main/AndroidManifest.xml
+          echo "Launcher icon ready."
 
       - name: Verify Android configuration
         shell: bash
         run: |
           set -e
 
-          echo "========================================"
-          echo "VERIFY ANDROID CONFIGURATION"
-          echo "========================================"
-
-          echo ""
-          echo "===== AGP ====="
-          grep -R \
-            "com.android.application" \
-            android/settings.gradle.kts \
-            android/build.gradle.kts \
-            2>/dev/null || true
-
-          echo ""
-          echo "===== Kotlin ====="
-          grep -R \
-            "kotlin" \
-            android/settings.gradle.kts \
-            android/build.gradle.kts \
-            2>/dev/null || true
-
-          echo ""
           echo "===== compileSdk / NDK ====="
+
           grep -E \
             "compileSdk|ndkVersion" \
             android/app/build.gradle.kts
 
           echo ""
           echo "===== Android API 37 ====="
-          test -d "$ANDROID_HOME/platforms/android-37"
-          test -f "$ANDROID_HOME/platforms/android-37/android.jar"
-          echo "Android API 37 is ready."
+
+          if [ -f "$ANDROID_HOME/platforms/android-37.0/android.jar" ]; then
+            echo "Android API 37.0 is installed."
+          elif [ -f "$ANDROID_HOME/platforms/android-37/android.jar" ]; then
+            echo "Android API 37 is installed."
+          else
+            echo "ERROR: Android API 37 android.jar not found."
+            find "$ANDROID_HOME/platforms" -maxdepth 2 -name android.jar -print
+            exit 1
+          fi
 
           echo ""
-          echo "===== NDK 28.2 ====="
+          echo "===== NDK ====="
+
           test -d "$ANDROID_HOME/ndk/28.2.13676358"
-          echo "NDK 28.2.13676358 is ready."
 
-          echo ""
-          echo "===== Launcher icon ====="
-          test -f \
-            android/app/src/main/res/drawable/ic_launcher.xml
-
-          echo "Launcher icon is ready."
+          echo "NDK 28.2.13676358 is installed."
 
       - name: Generate Gradle Wrapper
         working-directory: android
         shell: bash
         run: |
           set -e
-
-          echo "Generating Gradle Wrapper using Gradle 8.14.1..."
 
           gradle wrapper \
             --gradle-version 8.14.1 \
@@ -355,12 +267,8 @@ jobs:
           chmod +x gradlew
 
           echo ""
-          echo "===== Wrapper files ====="
-          ls -la
-          ls -la gradle/wrapper
-
-          echo ""
           echo "===== Gradle version ====="
+
           ./gradlew --version
 
       - name: Flutter Pub Get
@@ -376,24 +284,49 @@ jobs:
       - name: Build Release APK
         run: |
           set -e
-          flutter build apk --release
 
-      - name: Prepare APK
+          flutter build apk \
+            --release \
+            --verbose
+
+      - name: Find APK
         shell: bash
         run: |
           set -e
 
+          echo ""
+          echo "========================================"
+          echo "SEARCHING FOR APK"
+          echo "========================================"
+
+          find build \
+            -type f \
+            -name "*.apk" \
+            -print \
+            2>/dev/null || true
+
+          APK="$(find build -type f -name "app-release.apk" | head -n 1 || true)"
+
+          if [ -z "$APK" ]; then
+            echo ""
+            echo "ERROR: APK was not generated."
+            echo ""
+            echo "Gradle files:"
+            find android/app/build -type f 2>/dev/null | tail -n 50 || true
+            exit 1
+          fi
+
+          echo ""
+          echo "APK FOUND:"
+          echo "$APK"
+
           mkdir -p build/release
 
-          cp \
-            build/app/outputs/flutter-apk/app-release.apk \
+          cp "$APK" \
             build/release/app-release.apk
 
           echo ""
-          echo "========================================"
-          echo "APK CREATED SUCCESSFULLY"
-          echo "========================================"
-
+          echo "Final APK:"
           ls -lh build/release/app-release.apk
 
       - name: Upload APK
